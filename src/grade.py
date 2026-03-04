@@ -29,19 +29,31 @@ def _apply_grade_constraints(
     g = np.clip(g, z_terrain - max_height_m, z_terrain + max_height_m)
 
     max_slope = max_slope_pct / 100.0
-    n = len(x_stations)
+    dx = np.diff(x_stations)          # precomputed, avoids recomputing in loops
 
-    # Three smoothing passes (forward + backward) to propagate slope constraint
+    # Three smoothing passes (forward + backward) to propagate slope constraint.
+    # Sequential by nature; inner numpy operations keep it fast.
     for _ in range(3):
-        for i in range(1, n):
-            d = x_stations[i] - x_stations[i - 1]
-            g[i] = np.clip(g[i], g[i - 1] - max_slope * d, g[i - 1] + max_slope * d)
-        for i in range(n - 2, -1, -1):
-            d = x_stations[i + 1] - x_stations[i]
-            g[i] = np.clip(g[i], g[i + 1] - max_slope * d, g[i + 1] + max_slope * d)
+        for i in range(1, len(x_stations)):
+            d = dx[i - 1]
+            lo = g[i - 1] - max_slope * d
+            hi = g[i - 1] + max_slope * d
+            if g[i] < lo:
+                g[i] = lo
+            elif g[i] > hi:
+                g[i] = hi
+        for i in range(len(x_stations) - 2, -1, -1):
+            d = dx[i]
+            lo = g[i + 1] - max_slope * d
+            hi = g[i + 1] + max_slope * d
+            if g[i] < lo:
+                g[i] = lo
+            elif g[i] > hi:
+                g[i] = hi
 
     # Height limit is always priority 1
-    return np.clip(g, z_terrain - max_height_m, z_terrain + max_height_m)
+    np.clip(g, z_terrain - max_height_m, z_terrain + max_height_m, out=g)
+    return g
 
 
 def _compute_volumes(
@@ -60,14 +72,14 @@ def _compute_volumes(
       fill: A = width * h_fill + fill_slope * h_fill²
     """
     h = z_grade - z_terrain
-    h_cut = np.maximum(-h, 0.0)
-    h_fill = np.maximum(h, 0.0)
+    h_cut  = np.maximum(-h, 0.0)
+    h_fill = np.maximum( h, 0.0)
 
-    a_cut = road_width_m * h_cut + cut_slope_hv * h_cut ** 2
+    a_cut  = road_width_m * h_cut  + cut_slope_hv  * h_cut  ** 2
     a_fill = road_width_m * h_fill + fill_slope_hv * h_fill ** 2
 
     dx = np.diff(x_stations)
-    v_cut = (a_cut[:-1] + a_cut[1:]) * 0.5 * dx
+    v_cut  = (a_cut [:-1] + a_cut [1:]) * 0.5 * dx
     v_fill = (a_fill[:-1] + a_fill[1:]) * 0.5 * dx
 
     return v_cut, v_fill, h_cut, h_fill
@@ -100,14 +112,14 @@ def compute_grade(
         cut_area_m2, fill_area_m2, cut_vol_m3, fill_vol_m3 (incremental),
         cut_vol_cum_m3, fill_vol_cum_m3
     """
-    x = np.array([p["station_m"] for p in station_points])
-    z = np.array([p["z_terrain_m"] for p in station_points])
+    x = np.fromiter((p["station_m"]  for p in station_points), dtype=np.float64)
+    z = np.fromiter((p["z_terrain_m"] for p in station_points), dtype=np.float64)
     n = len(x)
 
     def total_vol(offset):
         g = _apply_grade_constraints(z, x, offset, max_slope_pct, max_height_m)
         vc, vf, _, _ = _compute_volumes(g, z, x, road_width_m, cut_slope_hv, fill_slope_hv)
-        return np.sum(vc) + np.sum(vf)
+        return float(np.sum(vc) + np.sum(vf))
 
     result = minimize_scalar(
         total_vol, bounds=(-max_height_m, max_height_m), method="bounded"
@@ -118,42 +130,56 @@ def compute_grade(
         g_final, z, x, road_width_m, cut_slope_hv, fill_slope_hv
     )
 
-    # Areas per station
-    a_cut = road_width_m * h_cut + cut_slope_hv * h_cut ** 2
+    # Areas per station (fully vectorised)
+    a_cut  = road_width_m * h_cut  + cut_slope_hv  * h_cut  ** 2
     a_fill = road_width_m * h_fill + fill_slope_hv * h_fill ** 2
 
-    # Incremental volumes: station[0] gets 0, station[i] gets v_inc[i-1]
-    v_cut_col = np.zeros(n)
-    v_fill_col = np.zeros(n)
-    v_cut_col[1:] = v_cut_inc
-    v_fill_col[1:] = v_fill_inc
+    # Incremental volumes: station[0] = 0, station[i] = v_inc[i-1]
+    v_cut_col  = np.empty(n); v_cut_col [0] = 0.0; v_cut_col [1:] = v_cut_inc
+    v_fill_col = np.empty(n); v_fill_col[0] = 0.0; v_fill_col[1:] = v_fill_inc
 
-    v_cut_cum = np.cumsum(v_cut_col)
+    v_cut_cum  = np.cumsum(v_cut_col)
     v_fill_cum = np.cumsum(v_fill_col)
 
-    # Grade slope per station
-    g_slope = np.zeros(n)
+    # Grade slope per station (vectorised)
+    g_slope = np.empty(n); g_slope[0] = 0.0
     if n > 1:
         dz = np.diff(g_final)
-        dx = np.diff(x)
-        g_slope[1:] = np.where(dx > 0, dz / dx * 100, 0.0)
+        dx_arr = np.diff(x)
+        g_slope[1:] = np.where(dx_arr > 0, dz / dx_arr * 100.0, 0.0)
 
-    enriched = []
-    for i, pt in enumerate(station_points):
-        enriched.append(
-            {
-                **pt,
-                "z_grade_m": round(float(g_final[i]), 2),
-                "grade_slope_pct": round(float(g_slope[i]), 2),
-                "cut_height_m": round(float(h_cut[i]), 2),
-                "fill_height_m": round(float(h_fill[i]), 2),
-                "cut_area_m2": round(float(a_cut[i]), 2),
-                "fill_area_m2": round(float(a_fill[i]), 2),
-                "cut_vol_m3": round(float(v_cut_col[i]), 2),
-                "fill_vol_m3": round(float(v_fill_col[i]), 2),
-                "cut_vol_cum_m3": round(float(v_cut_cum[i]), 2),
-                "fill_vol_cum_m3": round(float(v_fill_cum[i]), 2),
-            }
-        )
+    # Round all arrays once
+    g_final    = np.round(g_final,    2)
+    g_slope    = np.round(g_slope,    2)
+    h_cut      = np.round(h_cut,      2)
+    h_fill     = np.round(h_fill,     2)
+    a_cut      = np.round(a_cut,      2)
+    a_fill     = np.round(a_fill,     2)
+    v_cut_col  = np.round(v_cut_col,  2)
+    v_fill_col = np.round(v_fill_col, 2)
+    v_cut_cum  = np.round(v_cut_cum,  2)
+    v_fill_cum = np.round(v_fill_cum, 2)
+
+    # Build enriched list with a single vectorised zip (avoids per-element round/float)
+    enriched = [
+        {
+            **pt,
+            "z_grade_m":       float(g_final   [i]),
+            "grade_slope_pct": float(g_slope   [i]),
+            "cut_height_m":    float(h_cut     [i]),
+            "fill_height_m":   float(h_fill    [i]),
+            "cut_area_m2":     float(a_cut     [i]),
+            "fill_area_m2":    float(a_fill    [i]),
+            "cut_vol_m3":      float(v_cut_col [i]),
+            "fill_vol_m3":     float(v_fill_col[i]),
+            "cut_vol_cum_m3":  float(v_cut_cum [i]),
+            "fill_vol_cum_m3": float(v_fill_cum[i]),
+            # Road geometry params (needed by cross-section and 3D plots)
+            "road_width_m":  road_width_m,
+            "cut_slope_hv":  cut_slope_hv,
+            "fill_slope_hv": fill_slope_hv,
+        }
+        for i, pt in enumerate(station_points)
+    ]
 
     return enriched

@@ -266,40 +266,259 @@ def fig_mass_diagram(df: pd.DataFrame, shrink_swell: float = 1.125, access_id: O
     return fig
 
 
-# ─── 5. 3D VIEW ───────────────────────────────────────────────────────────────
+# ─── 5. CROSS-SECTION ─────────────────────────────────────────────────────────
+
+def fig_cross_section(df: pd.DataFrame, station_m: float, access_id: Optional[str] = None) -> go.Figure:
+    """
+    Engineering cross-section at the given chainage.
+    Shows natural ground line, road platform, cut zone (red) or fill zone (blue),
+    slope ratios and key dimensions.
+    """
+    sub = df[df["access_id"] == access_id] if access_id else df
+    if sub.empty:
+        return go.Figure()
+
+    # Closest station
+    idx = (sub["station_m"] - station_m).abs().idxmin()
+    row = sub.loc[idx]
+
+    h_cut   = float(row["cut_height_m"])
+    h_fill  = float(row["fill_height_m"])
+    road_w  = float(row["road_width_m"])
+    cut_hv  = float(row["cut_slope_hv"])
+    fill_hv = float(row["fill_slope_hv"])
+    sta     = float(row["station_m"])
+
+    fig = go.Figure()
+
+    if h_cut > 0.01:
+        # ── CUT SECTION ──
+        cut_half = road_w / 2 + cut_hv * h_cut   # horizontal reach of slope
+        margin   = max(cut_half * 0.35, 1.5)
+        x_max    = cut_half + margin
+
+        # Natural ground (y = 0 reference)
+        fig.add_trace(go.Scatter(
+            x=[-x_max, x_max], y=[0, 0],
+            mode="lines", name="Natural ground",
+            line=dict(color=_TERRAIN_COLOR, width=2.5, dash="dot"),
+        ))
+
+        # Cut polygon: slope lines + subgrade
+        cut_xs = [-cut_half, -road_w / 2, road_w / 2, cut_half, cut_half, -cut_half]
+        cut_ys = [0,         -h_cut,       -h_cut,      0,        0,        0       ]
+        fig.add_trace(go.Scatter(
+            x=cut_xs, y=cut_ys,
+            fill="toself",
+            fillcolor="rgba(224,82,82,0.20)",
+            line=dict(color=_CUT_COLOR, width=1.5),
+            name=f"Cut zone  Hc = {h_cut:.2f} m",
+        ))
+
+        # Road platform (subgrade)
+        fig.add_trace(go.Scatter(
+            x=[-road_w / 2, road_w / 2], y=[-h_cut, -h_cut],
+            mode="lines", name=f"Subgrade  W = {road_w:.1f} m",
+            line=dict(color=_GRADE_COLOR, width=4),
+        ))
+
+        # Dimension annotations
+        fig.add_annotation(x=0, y=-h_cut / 2, text=f"Hc = {h_cut:.2f} m",
+                           showarrow=False, font=dict(color=_CUT_COLOR, size=12),
+                           xref="x", yref="y")
+        fig.add_annotation(x=-cut_half / 2, y=-h_cut * 0.15,
+                           text=f"1 : {cut_hv:.2f}",
+                           showarrow=False, font=dict(color=_CUT_COLOR, size=11),
+                           xref="x", yref="y")
+        fig.add_annotation(x=cut_half / 2, y=-h_cut * 0.15,
+                           text=f"1 : {cut_hv:.2f}",
+                           showarrow=False, font=dict(color=_CUT_COLOR, size=11),
+                           xref="x", yref="y")
+        y_range = [-h_cut * 1.4, h_cut * 0.6]
+
+    elif h_fill > 0.01:
+        # ── FILL SECTION ──
+        fill_half = road_w / 2 + fill_hv * h_fill
+        margin    = max(fill_half * 0.35, 1.5)
+        x_max     = fill_half + margin
+
+        # Natural ground
+        fig.add_trace(go.Scatter(
+            x=[-x_max, x_max], y=[0, 0],
+            mode="lines", name="Natural ground",
+            line=dict(color=_TERRAIN_COLOR, width=2.5, dash="dot"),
+        ))
+
+        # Fill polygon
+        fill_xs = [-fill_half, -road_w / 2, road_w / 2, fill_half, fill_half, -fill_half]
+        fill_ys = [0,           h_fill,      h_fill,      0,         0,         0        ]
+        fig.add_trace(go.Scatter(
+            x=fill_xs, y=fill_ys,
+            fill="toself",
+            fillcolor="rgba(74,144,217,0.20)",
+            line=dict(color=_FILL_COLOR, width=1.5),
+            name=f"Fill zone  Hf = {h_fill:.2f} m",
+        ))
+
+        # Road platform
+        fig.add_trace(go.Scatter(
+            x=[-road_w / 2, road_w / 2], y=[h_fill, h_fill],
+            mode="lines", name=f"Subgrade  W = {road_w:.1f} m",
+            line=dict(color=_GRADE_COLOR, width=4),
+        ))
+
+        # Dimension annotations
+        fig.add_annotation(x=0, y=h_fill / 2, text=f"Hf = {h_fill:.2f} m",
+                           showarrow=False, font=dict(color=_FILL_COLOR, size=12),
+                           xref="x", yref="y")
+        fig.add_annotation(x=-fill_half / 2, y=h_fill * 0.15,
+                           text=f"1 : {fill_hv:.2f}",
+                           showarrow=False, font=dict(color=_FILL_COLOR, size=11),
+                           xref="x", yref="y")
+        fig.add_annotation(x=fill_half / 2, y=h_fill * 0.15,
+                           text=f"1 : {fill_hv:.2f}",
+                           showarrow=False, font=dict(color=_FILL_COLOR, size=11),
+                           xref="x", yref="y")
+        y_range = [-h_fill * 0.5, h_fill * 1.5]
+
+    else:
+        # ── ZERO HEIGHT ── (flat / on grade)
+        x_max = road_w / 2 + 3.0
+        fig.add_trace(go.Scatter(
+            x=[-x_max, x_max], y=[0, 0],
+            mode="lines", name="Natural ground / Subgrade",
+            line=dict(color=_TERRAIN_COLOR, width=2.5),
+        ))
+        fig.add_trace(go.Scatter(
+            x=[-road_w / 2, road_w / 2], y=[0, 0],
+            mode="lines", name=f"Road platform  W = {road_w:.1f} m",
+            line=dict(color=_GRADE_COLOR, width=5),
+        ))
+        y_range = [-2, 2]
+
+    # Centreline marker
+    fig.add_vline(x=0, line_dash="dash", line_color="#AAAAAA", line_width=1,
+                  annotation_text="CL", annotation_position="top")
+
+    fig.update_layout(
+        title=dict(text=f"Cross-section  —  Station {sta:.0f} m", font=dict(size=14)),
+        xaxis_title="Offset from centreline (m)",
+        yaxis_title="Elevation relative to natural ground (m)",
+        yaxis=dict(range=y_range, scaleanchor="x", scaleratio=1),
+        height=380,
+        template="plotly_white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        margin=dict(l=60, r=20, t=60, b=50),
+    )
+    return fig
+
+
+# ─── 6. 3D VIEW ───────────────────────────────────────────────────────────────
+
+
+def _perp_offset_deg(
+    lon_arr: np.ndarray, lat_arr: np.ndarray, half_w_m_arr: np.ndarray
+) -> tuple:
+    """
+    Return (d_lon, d_lat) arrays representing a perpendicular offset
+    of half_w_m_arr metres to the right of the road direction.
+    Fully vectorised with NumPy central-differences.
+    """
+    cos_lat = np.cos(np.radians(lat_arr))
+
+    # Central-difference direction vectors in metres
+    lat_next = np.roll(lat_arr, -1); lat_next[-1] = lat_arr[-1]
+    lat_prev = np.roll(lat_arr,  1); lat_prev[ 0] = lat_arr[ 0]
+    lon_next = np.roll(lon_arr, -1); lon_next[-1] = lon_arr[-1]
+    lon_prev = np.roll(lon_arr,  1); lon_prev[ 0] = lon_arr[ 0]
+
+    d_lat_m = (lat_next - lat_prev) * 111_000
+    d_lon_m = (lon_next - lon_prev) * 111_000 * cos_lat
+
+    mag = np.hypot(d_lat_m, d_lon_m)
+    mag = np.where(mag < 1e-9, 1.0, mag)   # avoid division by zero
+
+    # Rotate +90° → right-side perpendicular: (dy, -dx) / mag
+    perp_lat_m =  d_lon_m / mag
+    perp_lon_m = -d_lat_m / mag
+
+    d_lat = perp_lat_m * half_w_m_arr / 111_000
+    d_lon = perp_lon_m * half_w_m_arr / (111_000 * cos_lat)
+
+    return d_lon, d_lat
 
 def fig_3d(df: pd.DataFrame, access_id: Optional[str] = None) -> go.Figure:
-    """3D scatter of terrain and grade line along the alignment."""
+    """
+    3D view of terrain, grade line and earthworks footprint.
+    Shows fill embankment toe and cut crest as ribbons offset
+    perpendicularly from the centreline.
+    """
     sub = df[df["access_id"] == access_id] if access_id else df
     access_ids = df["access_id"].unique().tolist()
 
     fig = go.Figure()
 
     for acc in (sub["access_id"].unique() if access_id is None else [access_id]):
-        grp = sub[sub["access_id"] == acc]
+        grp = sub[sub["access_id"] == acc].reset_index(drop=True)
         color = _access_color(acc, access_ids)
 
-        fig.add_trace(
-            go.Scatter3d(
-                x=grp["lon"],
-                y=grp["lat"],
-                z=grp["z_terrain_m"],
-                mode="lines",
-                name=f"{acc} — Terrain",
-                line=dict(color=_TERRAIN_COLOR, width=3),
-            )
-        )
-        if "z_grade_m" in grp.columns:
-            fig.add_trace(
-                go.Scatter3d(
-                    x=grp["lon"],
-                    y=grp["lat"],
-                    z=grp["z_grade_m"],
+        lon_a = grp["lon"].values
+        lat_a = grp["lat"].values
+        z_ter = grp["z_terrain_m"].values
+        z_grd = grp["z_grade_m"].values if "z_grade_m" in grp.columns else z_ter
+
+        # Terrain centreline
+        fig.add_trace(go.Scatter3d(
+            x=lon_a, y=lat_a, z=z_ter,
+            mode="lines", name=f"{acc} — Terrain",
+            line=dict(color=_TERRAIN_COLOR, width=3),
+        ))
+
+        # Grade centreline
+        fig.add_trace(go.Scatter3d(
+            x=lon_a, y=lat_a, z=z_grd,
+            mode="lines", name=f"{acc} — Grade",
+            line=dict(color=color, width=5),
+        ))
+
+        if "road_width_m" in grp.columns:
+            road_w  = grp["road_width_m"].values
+            h_fill  = grp["fill_height_m"].values
+            h_cut   = grp["cut_height_m"].values
+            fill_hv = grp["fill_slope_hv"].values
+            cut_hv  = grp["cut_slope_hv"].values
+
+            # Half-widths of fill toe and cut crest
+            fill_hw = road_w / 2 + fill_hv * h_fill
+            cut_hw  = road_w / 2 + cut_hv  * h_cut
+
+            # Perpendicular offsets (right and left)
+            d_lon_f, d_lat_f = _perp_offset_deg(lon_a, lat_a, fill_hw)
+            d_lon_c, d_lat_c = _perp_offset_deg(lon_a, lat_a, cut_hw)
+
+            # Fill toe edges (at terrain z — base of embankment)
+            for sign, side in [(1, "R"), (-1, "L")]:
+                fig.add_trace(go.Scatter3d(
+                    x=lon_a + sign * d_lon_f,
+                    y=lat_a + sign * d_lat_f,
+                    z=z_ter,
                     mode="lines",
-                    name=f"{acc} — Grade",
-                    line=dict(color=color, width=5),
-                )
-            )
+                    name=f"{acc} — Fill toe ({side})",
+                    line=dict(color=_FILL_COLOR, width=2),
+                    opacity=0.7,
+                ))
+
+            # Cut crest edges (at terrain z — top of cut)
+            for sign, side in [(1, "R"), (-1, "L")]:
+                fig.add_trace(go.Scatter3d(
+                    x=lon_a + sign * d_lon_c,
+                    y=lat_a + sign * d_lat_c,
+                    z=z_ter,
+                    mode="lines",
+                    name=f"{acc} — Cut crest ({side})",
+                    line=dict(color=_CUT_COLOR, width=2),
+                    opacity=0.7,
+                ))
 
     fig.update_layout(
         scene=dict(
@@ -308,7 +527,7 @@ def fig_3d(df: pd.DataFrame, access_id: Optional[str] = None) -> go.Figure:
             zaxis_title="Elevation (m)",
             aspectmode="auto",
         ),
-        height=500,
+        height=520,
         template="plotly_white",
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )

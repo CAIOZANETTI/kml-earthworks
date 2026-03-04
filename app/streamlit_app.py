@@ -162,6 +162,62 @@ with st.sidebar:
         disabled=(not uploaded_files or not st.session_state.lead_submitted),
     )
 
+    st.divider()
+    with st.expander("📖 User Manual", expanded=False):
+        st.markdown(
+            """
+**How to use**
+
+1. **Draw** your access road as a LineString in Google Earth.
+2. **Export** → Save Place As → Format: KML.
+3. **Upload** one or more KML files above.
+4. **Set parameters** (road width, slopes, max grade).
+5. **Run Analysis** — terrain elevations are fetched automatically.
+
+---
+
+**Parameters**
+
+| Parameter | Description |
+|-----------|-------------|
+| Road width | Platform width (subgrade) in metres |
+| Max slope | Maximum longitudinal grade (%) |
+| Cut side slope | Horizontal : Vertical ratio for cut slopes |
+| Fill side slope | H:V ratio for fill embankment slopes |
+| Shrink/Swell | Volume correction factor (>1 = swell) |
+| Max cut/fill height | Upper limit for cut or fill height |
+
+---
+
+**Result tabs**
+
+| Tab | What you see |
+|-----|-------------|
+| Plan View | Map of all alignments |
+| Profile | Terrain vs grade line with cut/fill shading |
+| Cross Section | Engineering section at any chainage |
+| Volumes | Cut/fill bars + mass haul diagram |
+| 3D | Three-dimensional view with embankment footprint |
+| Tables | Segment summary + per-station detail |
+| Export | Download CSV |
+
+---
+
+**Tech stack**
+
+`Streamlit` · `Plotly` · `pandas` · `NumPy` · `SciPy`
+Elevation data: Open-Elevation API (free, no key required).
+
+---
+
+**Disclaimer**
+
+For early-stage estimation only.
+Validate against a survey DTM before using in procurement or construction.
+""",
+            unsafe_allow_html=False,
+        )
+
 # ──────────────────────────────────────────────────────────────────────────────
 # RUN PIPELINE
 # ──────────────────────────────────────────────────────────────────────────────
@@ -277,8 +333,8 @@ if st.session_state.results_df is not None:
     st.divider()
 
     # ── Tabs ──
-    tab_map, tab_profile, tab_vol, tab_3d, tab_tables, tab_export = st.tabs(
-        ["🗺 Plan View", "📈 Profile", "📊 Volumes", "🧊 3D", "📋 Tables", "⬇ Export"]
+    tab_map, tab_profile, tab_xsec, tab_vol, tab_3d, tab_tables, tab_export = st.tabs(
+        ["🗺 Plan View", "📈 Profile", "✂ Cross Section", "📊 Volumes", "🧊 3D", "📋 Tables", "⬇ Export"]
     )
 
     # ── Filter helpers ──
@@ -294,6 +350,33 @@ if st.session_state.results_df is not None:
             plots.fig_profile(df, acc_filter),
             use_container_width=True,
         )
+
+    with tab_xsec:
+        sel_acc_x = st.selectbox("Access alignment", ["All"] + access_ids, key="xsec_sel")
+        acc_filter_x = None if sel_acc_x == "All" else sel_acc_x
+        sub_x = df[df["access_id"] == acc_filter_x] if acc_filter_x else df
+        sta_min = float(sub_x["station_m"].min())
+        sta_max = float(sub_x["station_m"].max())
+        sta_sel = st.slider(
+            "Station (m)", min_value=sta_min, max_value=sta_max,
+            value=(sta_min + sta_max) / 2, step=5.0, key="xsec_sta",
+        )
+        col_xA, col_xB = st.columns([3, 1])
+        with col_xA:
+            st.plotly_chart(
+                plots.fig_cross_section(df, sta_sel, acc_filter_x),
+                use_container_width=True,
+            )
+        with col_xB:
+            row_x = sub_x.iloc[(sub_x["station_m"] - sta_sel).abs().argsort()[:1]]
+            if not row_x.empty:
+                r = row_x.iloc[0]
+                st.metric("Terrain elev.", f"{r['z_terrain_m']:.2f} m")
+                st.metric("Grade elev.",   f"{r['z_grade_m']:.2f} m")
+                st.metric("Cut height",    f"{r['cut_height_m']:.2f} m")
+                st.metric("Fill height",   f"{r['fill_height_m']:.2f} m")
+                st.metric("Cut area",      f"{r['cut_area_m2']:.1f} m²")
+                st.metric("Fill area",     f"{r['fill_area_m2']:.1f} m²")
 
     with tab_vol:
         sel_acc2 = st.selectbox("Access alignment", ["All"] + access_ids, key="vol_sel")
