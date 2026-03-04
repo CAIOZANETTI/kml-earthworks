@@ -48,8 +48,8 @@ def _get_client():
 
 def log_lead(
     name: str,
-    country: str,
     email: str,
+    country: str = "",
     linkedin: str = "",
     files_uploaded: int = 0,
     total_length_m: float = 0.0,

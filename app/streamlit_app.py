@@ -60,8 +60,12 @@ st.markdown(
 
     /* Sidebar */
     [data-testid="stSidebar"] { background: #F7F8FC; }
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] div { color: #1A1A2E !important; }
     .sidebar-title { font-weight: 700; font-size: 0.7rem; text-transform: uppercase;
-                     letter-spacing: 0.1em; color: #888; margin: 1rem 0 0.25rem; }
+                     letter-spacing: 0.1em; color: #888 !important; margin: 1rem 0 0.25rem; }
 
     /* Tab strip */
     [data-testid="stTab"] { font-weight: 600; }
