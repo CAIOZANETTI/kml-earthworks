@@ -37,43 +37,51 @@ def _get_client():
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive",
         ]
-        creds = Credentials.from_service_account_info(
-            dict(st.secrets["gcp_service_account"]),
-            scopes=scopes,
-        )
-        return gspread.authorize(creds)
-    except Exception:
-        return None
+        info = dict(st.secrets["gcp_service_account"])
+        creds = Credentials.from_service_account_info(info, scopes=scopes)
+        # Use gspread.Client directly — gspread.authorize() is deprecated in v5+
+        return gspread.Client(auth=creds)
+    except Exception as exc:
+        return str(exc)   # return error message so callers can surface it
 
 
 def log_lead(
     name: str,
     email: str,
     country: str = "",
+    company: str = "",
     linkedin: str = "",
     files_uploaded: int = 0,
     total_length_m: float = 0.0,
-) -> bool:
+) -> tuple[bool, str]:
     """
     Append one lead row to the configured Google Sheet.
-    Returns True on success, False if secrets not configured.
+
+    Returns:
+        (True, "")           on success
+        (False, reason_str)  on failure (secrets missing, auth error, API error)
+
+    Sheet column order:
+        timestamp | name | company | country | email | linkedin | files_uploaded | total_length_m
     """
     try:
         import streamlit as st
 
         sheet_id = st.secrets.get("gsheets", {}).get("spreadsheet_id", "")
         if not sheet_id:
-            return False
+            return False, "spreadsheet_id not found in [gsheets] secrets"
 
         client = _get_client()
-        if client is None:
-            return False
+        if isinstance(client, str):
+            # _get_client returned an error message
+            return False, f"Auth error: {client}"
 
         sheet = client.open_by_key(sheet_id).sheet1
         sheet.append_row(
             [
                 datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
                 name,
+                company,         # column 3 — kept blank if not collected
                 country,
                 email,
                 linkedin,
@@ -82,9 +90,9 @@ def log_lead(
             ],
             value_input_option="USER_ENTERED",
         )
-        return True
-    except Exception:
-        return False
+        return True, ""
+    except Exception as exc:
+        return False, str(exc)
 
 
 def leads_configured() -> bool:

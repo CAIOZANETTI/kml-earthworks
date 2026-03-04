@@ -123,12 +123,14 @@ if not st.session_state.lead_submitted:
         )
         if st.button("Continue to app →", type="primary"):
             if lead_name and lead_email:
-                leads.log_lead(
+                ok, err = leads.log_lead(
                     name=lead_name,
                     country=lead_country,
                     email=lead_email,
                     linkedin=lead_linkedin,
                 )
+                if not ok and err:
+                    st.warning(f"Lead not saved to sheet: {err}")
                 st.session_state.lead_submitted = True
                 st.rerun()
             else:
