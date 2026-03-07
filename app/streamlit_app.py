@@ -124,6 +124,11 @@ if "session_id" not in st.session_state:
     if row_id:
         st.session_state.access_log_id = row_id
         st.session_state.last_exit_ping_ts = time.time()
+    else:
+        print(
+            "Access log insert failed for session "
+            f"{st.session_state.session_id}. Check Supabase secrets and RLS policies."
+        )
 
 # Best-effort "last seen": updates exit_time periodically during active reruns.
 if st.session_state.access_log_id:
