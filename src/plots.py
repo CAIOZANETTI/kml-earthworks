@@ -88,13 +88,24 @@ def fig_profile(df: pd.DataFrame, access_id: Optional[str] = None) -> go.Figure:
     """Terrain vs grade line profile with cut/fill shading."""
     sub = df[df["access_id"] == access_id] if access_id else df
 
+    x = sub["station_m"].to_numpy()
+    terrain = sub["z_terrain_m"].to_numpy()
+    grade = sub["z_grade_m"].to_numpy()
+    fill_mask = grade > terrain
+    cut_mask = terrain > grade
+
+    fill_bottom = np.where(fill_mask, terrain, np.nan)
+    fill_top = np.where(fill_mask, grade, np.nan)
+    cut_bottom = np.where(cut_mask, grade, np.nan)
+    cut_top = np.where(cut_mask, terrain, np.nan)
+
     fig = go.Figure()
 
-    # Shading: fill area (grade > terrain)
+    # Shading: fill area (grade > terrain), shown only where mask is true
     fig.add_trace(
         go.Scatter(
-            x=sub["station_m"],
-            y=sub["z_terrain_m"],
+            x=x,
+            y=fill_bottom,
             line=dict(width=0),
             showlegend=False,
             hoverinfo="skip",
@@ -102,8 +113,8 @@ def fig_profile(df: pd.DataFrame, access_id: Optional[str] = None) -> go.Figure:
     )
     fig.add_trace(
         go.Scatter(
-            x=sub["station_m"],
-            y=sub["z_grade_m"],
+            x=x,
+            y=fill_top,
             fill="tonexty",
             fillcolor="rgba(74,144,217,0.25)",
             line=dict(width=0),
@@ -112,11 +123,11 @@ def fig_profile(df: pd.DataFrame, access_id: Optional[str] = None) -> go.Figure:
         )
     )
 
-    # Shading: cut area (terrain > grade)
+    # Shading: cut area (terrain > grade), shown only where mask is true
     fig.add_trace(
         go.Scatter(
-            x=sub["station_m"],
-            y=sub["z_grade_m"],
+            x=x,
+            y=cut_bottom,
             line=dict(width=0),
             showlegend=False,
             hoverinfo="skip",
@@ -124,8 +135,8 @@ def fig_profile(df: pd.DataFrame, access_id: Optional[str] = None) -> go.Figure:
     )
     fig.add_trace(
         go.Scatter(
-            x=sub["station_m"],
-            y=sub["z_terrain_m"],
+            x=x,
+            y=cut_top,
             fill="tonexty",
             fillcolor="rgba(224,82,82,0.25)",
             line=dict(width=0),

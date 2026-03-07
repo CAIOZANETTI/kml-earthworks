@@ -151,6 +151,13 @@ with st.sidebar:
     fill_slope   = st.slider("Fill side slope (H:V)", 1.0,  3.0,  1.5, 0.25)
     shrink_swell = st.slider("Shrink/Swell factor",  0.90, 1.30, 1.125, 0.005, format="%.3f")
     max_height   = st.slider("Max cut/fill height (m)", 2.0, 20.0, 10.0, 0.5)
+    objective_label = st.radio(
+        "Earthworks objective",
+        ["Balanced mass", "Minimum total volume"],
+        horizontal=False,
+        help="Balanced mass targets cut≈fill after shrink/swell. Minimum total volume reduces total movement regardless of balance.",
+    )
+    objective_mode = "balanced" if objective_label == "Balanced mass" else "min_volume"
     st.markdown("---")
     st.markdown("### Feedback")
     st.caption("Tell me what you liked and what can be improved.")
@@ -226,6 +233,7 @@ if run and not run_disabled:
                     cut_slope_hv=cut_slope,
                     fill_slope_hv=fill_slope,
                     shrink_swell=shrink_swell,
+                    objective_mode=objective_mode,
                 )
                 alignments_data.append(
                     {
@@ -257,6 +265,7 @@ if run and not run_disabled:
                 "Fill side slope": f"{fill_slope} H:V",
                 "Shrink/Swell factor": f"{shrink_swell:.3f}",
                 "Max cut/fill height": f"{max_height} m",
+                "Earthworks objective": objective_label,
                 "Stake interval": "20 m",
                 "Elevation source": "Open-Meteo (free, ~30 m resolution)",
             }

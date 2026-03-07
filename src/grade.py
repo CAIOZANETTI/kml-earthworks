@@ -93,6 +93,7 @@ def compute_grade(
     cut_slope_hv: float = 1.0,
     fill_slope_hv: float = 1.5,
     shrink_swell: float = 1.125,
+    objective_mode: str = "balanced",
 ) -> List[Dict]:
     """
     Given station points (with z_terrain_m), compute the optimal grade line
@@ -106,6 +107,8 @@ def compute_grade(
         cut_slope_hv:   cut side slope H:V ratio
         fill_slope_hv:  fill side slope H:V ratio
         shrink_swell:   volume correction factor (> 1 = swell)
+        objective_mode: "balanced" (target cut≈fill after factor)
+                        or "min_volume" (minimum total earthworks)
 
     Returns:
         same list enriched with z_grade_m, cut_height_m, fill_height_m,
@@ -116,13 +119,28 @@ def compute_grade(
     z = np.fromiter((p["z_terrain_m"] for p in station_points), dtype=np.float64)
     n = len(x)
 
-    def total_vol(offset):
+    def _metrics(offset):
         g = _apply_grade_constraints(z, x, offset, max_slope_pct, max_height_m)
         vc, vf, _, _ = _compute_volumes(g, z, x, road_width_m, cut_slope_hv, fill_slope_hv)
-        return float(np.sum(vc) + np.sum(vf))
+        cut_total = float(np.sum(vc))
+        fill_total = float(np.sum(vf))
+        total = cut_total + fill_total
+        net = cut_total * shrink_swell - fill_total
+        return total, net
+
+    def total_vol(offset):
+        total, _ = _metrics(offset)
+        return total
+
+    def balance_obj(offset):
+        total, net = _metrics(offset)
+        # Prioritise mass balance; tiny total-volume tie-breaker avoids unstable flats
+        return abs(net) + (1e-6 * total)
+
+    objective_fn = total_vol if objective_mode == "min_volume" else balance_obj
 
     result = minimize_scalar(
-        total_vol, bounds=(-max_height_m, max_height_m), method="bounded"
+        objective_fn, bounds=(-max_height_m, max_height_m), method="bounded"
     )
 
     g_final = _apply_grade_constraints(z, x, result.x, max_slope_pct, max_height_m)
