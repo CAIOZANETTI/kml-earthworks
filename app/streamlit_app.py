@@ -5,9 +5,13 @@ kml-earthworks — KML → Terrain Profiles → Cut/Fill Volumes
 
 import sys
 import os
+import uuid
 
 # Allow imports from repo root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from dotenv import load_dotenv
+load_dotenv()
 
 import streamlit as st
 import pandas as pd
@@ -17,7 +21,7 @@ from src.elevation import enrich_elevation
 from src.stationing import build_stationing
 from src.grade import compute_grade
 from src.earthworks import build_dataframe, build_segment_summary, overall_kpis
-from src import plots, exports, leads
+from src import plots, exports, leads, db
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PAGE CONFIG
@@ -90,6 +94,12 @@ for key in ("results_df", "summary_df", "kpis", "figures", "params_used"):
 
 if "lead_submitted" not in st.session_state:
     st.session_state.lead_submitted = False
+
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+    row_id = db.log_access(st.session_state.session_id)
+    if row_id:
+        st.session_state.access_log_id = row_id
 
 # ──────────────────────────────────────────────────────────────────────────────
 # HERO
@@ -446,6 +456,26 @@ if st.session_state.results_df is not None:
         params_df = pd.DataFrame(params.items(), columns=["Parameter", "Value"])
         st.dataframe(params_df, use_container_width=True, hide_index=True)
 
+    # ── Survey ──
+    st.divider()
+    st.markdown("### 📝 O que achou do sistema?")
+    st.caption("Deixe sua opinião e nos ajude a melhorar.")
+    
+    with st.form("feedback_form", clear_on_submit=True):
+        f_nome = st.text_input("Seu nome:")
+        f_email = st.text_input("Seu e-mail:")
+        f_feedback = st.text_area("O que você gostou e o que não gostou?")
+        f_submit = st.form_submit_button("Enviar avaliação", type="primary")
+        
+        if f_submit:
+            if f_nome and f_email and f_feedback:
+                if db.log_feedback(f_nome, f_email, f_feedback):
+                    st.success("Obrigado pelo seu feedback!")
+                else:
+                    st.error("Erro ao salvar feedback. Tente novamente mais tarde.")
+            else:
+                st.warning("Por favor, preencha todos os campos para enviar.")
+
 # ──────────────────────────────────────────────────────────────────────────────
 # EMPTY STATE
 # ──────────────────────────────────────────────────────────────────────────────
@@ -455,6 +485,27 @@ elif st.session_state.lead_submitted:
         "adjust parameters, then click **Run Analysis**.",
         icon="📂",
     )
+    
+    # ── KML Samples ──
+    st.markdown("#### Exemplos de KML")
+    st.caption("Faça o download dos arquivos abaixo na pasta de exemplos e envie pelo menu lateral para testar a ferramenta.")
+    sample_col1, sample_col2, sample_col3 = st.columns(3)
+    
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "..", "sample", "AC-2.kml"), "r") as f:
+            ac2_data = f.read()
+            sample_col1.download_button("⬇ Baixar AC-2.kml", data=ac2_data, file_name="AC-2.kml", use_container_width=True)
+            
+        with open(os.path.join(os.path.dirname(__file__), "..", "sample", "AC-3.kml"), "r") as f:
+            ac3_data = f.read()
+            sample_col2.download_button("⬇ Baixar AC-3.kml", data=ac3_data, file_name="AC-3.kml", use_container_width=True)
+            
+        with open(os.path.join(os.path.dirname(__file__), "..", "sample", "AC-4.kml"), "r") as f:
+            ac4_data = f.read()
+            sample_col3.download_button("⬇ Baixar AC-4.kml", data=ac4_data, file_name="AC-4.kml", use_container_width=True)
+    except Exception as e:
+        st.warning(f"Exemplos não encontrados: {e}")
+
     with st.expander("How it works"):
         st.markdown(
             """

@@ -1,0 +1,6 @@
+
+# Ignorar pasta de melhorias
+melhorias/
+
+# Secrets
+.env
