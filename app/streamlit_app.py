@@ -275,7 +275,6 @@ with st.sidebar:
     st.markdown('<p class="sidebar-title">Design Updates</p>', unsafe_allow_html=True)
     auto_update_design = st.toggle(
         "Auto-update design",
-        value=st.session_state.auto_update_design,
         key="auto_update_design",
         help="Recalculate cut/fill, KPIs and charts automatically when parameters change (without refetching elevation).",
     )
