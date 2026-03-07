@@ -155,6 +155,8 @@ with st.sidebar:
     run_disabled = False
     if data_source == "Upload your own KML" and not files_data:
         run_disabled = True
+    elif data_source == "Use a sample KML" and not sample_choice:
+        run_disabled = True
 
     run = st.button(
         "⚡ Run Analysis",
