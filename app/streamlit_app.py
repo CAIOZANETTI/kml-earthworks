@@ -21,7 +21,7 @@ from src.elevation import enrich_elevation
 from src.stationing import build_stationing
 from src.grade import compute_grade
 from src.earthworks import build_dataframe, build_segment_summary, overall_kpis
-from src import plots, exports, leads, db
+from src import plots, exports, db
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PAGE CONFIG
@@ -337,17 +337,16 @@ if st.session_state.results_df is not None:
     with tab_vol:
         sel_acc2 = st.selectbox("Access alignment", ["All"] + access_ids, key="vol_sel")
         acc_filter2 = None if sel_acc2 == "All" else sel_acc2
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.plotly_chart(
-                plots.fig_cut_fill_bars(df, acc_filter2),
-                use_container_width=True,
-            )
-        with col_b:
-            st.plotly_chart(
-                plots.fig_mass_diagram(df, shrink_swell, acc_filter2),
-                use_container_width=True,
-            )
+        st.markdown("#### Cut / Fill Heights")
+        st.plotly_chart(
+            plots.fig_cut_fill_bars(df, acc_filter2),
+            use_container_width=True,
+        )
+        st.markdown("#### Mass Diagram")
+        st.plotly_chart(
+            plots.fig_mass_diagram(df, shrink_swell, acc_filter2),
+            use_container_width=True,
+        )
 
     with tab_3d:
         sel_acc3 = st.selectbox("Access alignment", ["All"] + access_ids, key="3d_sel")
@@ -455,25 +454,11 @@ if st.session_state.results_df is not None:
         params_df = pd.DataFrame(params.items(), columns=["Parameter", "Value"])
         st.dataframe(params_df, use_container_width=True, hide_index=True)
 
-    # ── Survey ──
+    # ── Feedback contact ──
     st.divider()
-    st.markdown("### 📝 O que achou do sistema?")
-    st.caption("Deixe sua opinião e nos ajude a melhorar.")
-    
-    with st.form("feedback_form", clear_on_submit=True):
-        f_nome = st.text_input("Seu nome:")
-        f_email = st.text_input("Seu e-mail:")
-        f_feedback = st.text_area("O que você gostou e o que não gostou?")
-        f_submit = st.form_submit_button("Enviar avaliação", type="primary")
-        
-        if f_submit:
-            if f_nome and f_email and f_feedback:
-                if db.log_feedback(f_nome, f_email, f_feedback):
-                    st.success("Obrigado pelo seu feedback!")
-                else:
-                    st.error("Erro ao salvar feedback. Tente novamente mais tarde.")
-            else:
-                st.warning("Por favor, preencha todos os campos para enviar.")
+    st.markdown("### Feedback")
+    st.caption("Tell me what you liked and what can be improved.")
+    st.markdown("Contact: **caiozanetti@gmail.com**")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # EMPTY STATE
