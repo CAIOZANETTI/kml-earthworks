@@ -4,3 +4,4 @@ melhorias/
 
 # Secrets
 .env
+.venv/
