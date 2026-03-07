@@ -6,6 +6,7 @@ kml-earthworks — KML → Terrain Profiles → Cut/Fill Volumes
 import sys
 import os
 import uuid
+import inspect
 
 # Allow imports from repo root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -22,6 +23,8 @@ from src.stationing import build_stationing
 from src.grade import compute_grade
 from src.earthworks import build_dataframe, build_segment_summary, overall_kpis
 from src import plots, exports, db
+
+_COMPUTE_GRADE_SUPPORTS_OBJECTIVE = "objective_mode" in inspect.signature(compute_grade).parameters
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PAGE CONFIG
@@ -225,16 +228,26 @@ if run and not run_disabled:
             alignments_data = []
             for a in alignments:
                 stations = build_stationing(a["points"])
-                stations = compute_grade(
-                    stations,
+                grade_kwargs = dict(
                     road_width_m=road_width,
                     max_slope_pct=max_slope,
                     max_height_m=max_height,
                     cut_slope_hv=cut_slope,
                     fill_slope_hv=fill_slope,
                     shrink_swell=shrink_swell,
-                    objective_mode=objective_mode,
                 )
+                if _COMPUTE_GRADE_SUPPORTS_OBJECTIVE:
+                    grade_kwargs["objective_mode"] = objective_mode
+
+                try:
+                    stations = compute_grade(stations, **grade_kwargs)
+                except TypeError as exc:
+                    # Backward compatibility for environments still loading an older grade.py.
+                    if "objective_mode" in str(exc):
+                        grade_kwargs.pop("objective_mode", None)
+                        stations = compute_grade(stations, **grade_kwargs)
+                    else:
+                        raise
                 alignments_data.append(
                     {
                         "file_name": a["file_name"],
@@ -265,7 +278,7 @@ if run and not run_disabled:
                 "Fill side slope": f"{fill_slope} H:V",
                 "Shrink/Swell factor": f"{shrink_swell:.3f}",
                 "Max cut/fill height": f"{max_height} m",
-                "Earthworks objective": objective_label,
+                "Earthworks objective": objective_label if _COMPUTE_GRADE_SUPPORTS_OBJECTIVE else "Legacy engine (min total volume)",
                 "Stake interval": "20 m",
                 "Elevation source": "Open-Meteo (free, ~30 m resolution)",
             }
