@@ -115,28 +115,35 @@ st.markdown(
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
-# SIDEBAR — UPLOAD + PARAMETERS
+# MAIN AREA — UPLOAD
+# ──────────────────────────────────────────────────────────────────────────────
+st.markdown("### Input Data")
+data_source = st.radio(
+    "Choose input method:", 
+    ["Upload your own KML", "Use a sample KML"],
+    horizontal=True
+)
+
+files_data = []
+sample_choice = None
+
+if data_source == "Upload your own KML":
+    uploaded_files = st.file_uploader(
+        "KML files",
+        type=["kml"],
+        accept_multiple_files=True,
+        help="Draw LineStrings in Google Earth, export as KML, upload here.",
+        disabled=not st.session_state.lead_submitted,
+    )
+    if uploaded_files:
+        files_data = [{"name": f.name, "content": f.read()} for f in uploaded_files]
+else:
+    sample_choice = st.selectbox("Select a sample to analyze:", ["AC-2.kml", "AC-3.kml", "AC-4.kml"])
+
+# ──────────────────────────────────────────────────────────────────────────────
+# SIDEBAR — PARAMETERS
 # ──────────────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("### Input Data")
-    data_source = st.radio("Choose input method:", ["Upload your own KML", "Use a sample KML"])
-    
-    files_data = []
-    sample_choice = None
-    
-    if data_source == "Upload your own KML":
-        uploaded_files = st.file_uploader(
-            "KML files",
-            type=["kml"],
-            accept_multiple_files=True,
-            help="Draw LineStrings in Google Earth, export as KML, upload here.",
-            disabled=not st.session_state.lead_submitted,
-        )
-        if uploaded_files:
-            files_data = [{"name": f.name, "content": f.read()} for f in uploaded_files]
-    else:
-        sample_choice = st.selectbox("Select a sample to analyze:", ["AC-2.kml", "AC-3.kml", "AC-4.kml"])
-
     st.markdown('<p class="sidebar-title">Road Parameters</p>', unsafe_allow_html=True)
     road_width   = st.slider("Road width (m)",        3.0, 12.0, 6.0, 0.5)
     max_slope    = st.slider("Max slope (%)",          2.0, 20.0, 16.0, 0.5)
