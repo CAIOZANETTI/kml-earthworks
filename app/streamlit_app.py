@@ -243,7 +243,6 @@ if run and not run_disabled:
                 "Profile": plots.fig_profile(results_df),
                 "Cut / Fill Heights": plots.fig_cut_fill_bars(results_df),
                 "Mass Diagram": plots.fig_mass_diagram(results_df, shrink_swell),
-                "3D View": plots.fig_3d(results_df),
             }
 
             params_used = {
@@ -289,8 +288,8 @@ if st.session_state.results_df is not None:
     st.divider()
 
     # ── Tabs ──
-    tab_map, tab_profile, tab_xsec, tab_vol, tab_3d, tab_tables, tab_export = st.tabs(
-        ["🗺 Plan View", "📈 Profile", "✂ Cross Section", "📊 Volumes", "🧊 3D", "📋 Tables", "⬇ Export"]
+    tab_map, tab_profile, tab_xsec, tab_vol, tab_tables, tab_export = st.tabs(
+        ["🗺 Plan View", "📈 Profile", "✂ Cross Section", "📊 Volumes", "📋 Tables", "⬇ Export"]
     )
 
     # ── Filter helpers ──
@@ -345,14 +344,6 @@ if st.session_state.results_df is not None:
         st.markdown("#### Mass Diagram")
         st.plotly_chart(
             plots.fig_mass_diagram(df, shrink_swell, acc_filter2),
-            use_container_width=True,
-        )
-
-    with tab_3d:
-        sel_acc3 = st.selectbox("Access alignment", ["All"] + access_ids, key="3d_sel")
-        acc_filter3 = None if sel_acc3 == "All" else sel_acc3
-        st.plotly_chart(
-            plots.fig_3d(df, acc_filter3),
             use_container_width=True,
         )
 
@@ -482,7 +473,7 @@ elif st.session_state.lead_submitted:
    - Builds chainage with stakes every 20 m
    - Computes an optimised grade line (minimises total earthworks)
    - Calculates cut & fill cross-sections and volumes
-5. **Review** interactive charts: plan view, profile, cut/fill bars, mass diagram, 3D.
+5. **Review** interactive charts: plan view, profile, cut/fill bars, mass diagram.
 6. **Download** an Excel spreadsheet or a self-contained HTML report.
             """
         )
