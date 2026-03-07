@@ -93,7 +93,7 @@ for key in ("results_df", "summary_df", "kpis", "figures", "params_used"):
         st.session_state[key] = None
 
 if "lead_submitted" not in st.session_state:
-    st.session_state.lead_submitted = False
+    st.session_state.lead_submitted = True
 
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
@@ -113,38 +113,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
-# ──────────────────────────────────────────────────────────────────────────────
-# LEAD CAPTURE (shown once per session, before results)
-# ──────────────────────────────────────────────────────────────────────────────
-if not st.session_state.lead_submitted:
-    with st.expander("👋 Tell us who you are — get full access", expanded=True):
-        st.caption(
-            "This tool is free. We just want to know who's using it "
-            "so we can make it better. No spam, ever."
-        )
-        lc1, lc2 = st.columns(2)
-        lead_name    = lc1.text_input("Your name *", placeholder="Jane Engineer")
-        lead_country = lc2.text_input("Country (optional)", placeholder="Australia")
-        lc3, lc4 = st.columns(2)
-        lead_email   = lc3.text_input("Work email *", placeholder="jane@acme.com")
-        lead_linkedin = lc4.text_input(
-            "LinkedIn URL (optional)", placeholder="https://linkedin.com/in/..."
-        )
-        if st.button("Continue to app →", type="primary"):
-            if lead_name and lead_email:
-                ok, err = leads.log_lead(
-                    name=lead_name,
-                    country=lead_country,
-                    email=lead_email,
-                    linkedin=lead_linkedin,
-                )
-                if not ok and err:
-                    st.warning(f"Lead not saved to sheet: {err}")
-                st.session_state.lead_submitted = True
-                st.rerun()
-            else:
-                st.warning("Please fill in all required fields (*).")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SIDEBAR — UPLOAD + PARAMETERS
