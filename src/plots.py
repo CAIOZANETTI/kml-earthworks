@@ -219,20 +219,47 @@ def fig_cut_fill_bars(df: pd.DataFrame, access_id: Optional[str] = None) -> go.F
 
 # ─── 4. MASS DIAGRAM ──────────────────────────────────────────────────────────
 
-def fig_mass_diagram(df: pd.DataFrame, shrink_swell: float = 1.125, access_id: Optional[str] = None) -> go.Figure:
-    """Cumulative cut and fill + net balance (mass haul diagram)."""
-    sub = df[df["access_id"] == access_id] if access_id else df
+def fig_mass_diagram(
+    df: pd.DataFrame,
+    shrink_swell: float = 1.125,
+    access_id: Optional[str] = None,
+) -> go.Figure:
+    """
+    Cumulative cut/fill + net balance (mass haul diagram).
+    Uses an equivalent-cut curve (cut * shrink_swell) so balance is visually consistent.
+    """
+    sub = df[df["access_id"] == access_id].copy() if access_id else df.copy()
+
+    if sub.empty:
+        return go.Figure()
+
+    if access_id is None and sub["access_id"].nunique() > 1:
+        # For "All alignments", aggregate incremental volumes by chainage.
+        # This avoids non-monotonic traces when different alignments restart at 0 m.
+        sub = (
+            sub.groupby("station_m", as_index=False)[["cut_vol_m3", "fill_vol_m3"]]
+            .sum()
+            .sort_values("station_m")
+        )
+        sub["cut_vol_cum_m3"] = sub["cut_vol_m3"].cumsum()
+        sub["fill_vol_cum_m3"] = sub["fill_vol_m3"].cumsum()
+    else:
+        sub = sub.sort_values("station_m").copy()
+
+    sub["cut_equiv_cum_m3"] = sub["cut_vol_cum_m3"] * shrink_swell
+    sub["mass_balance_m3"] = sub["cut_equiv_cum_m3"] - sub["fill_vol_cum_m3"]
 
     fig = go.Figure()
 
     fig.add_trace(
         go.Scatter(
             x=sub["station_m"],
-            y=sub["cut_vol_cum_m3"],
-            name="Cumulative Cut (m³)",
+            y=sub["cut_equiv_cum_m3"],
+            name=f"Equivalent Cut (m³) × {shrink_swell:.3f}",
             line=dict(color=_CUT_COLOR, width=2),
             fill="tozeroy",
             fillcolor="rgba(224,82,82,0.12)",
+            hovertemplate="Station %{x:.0f} m<br>Equivalent cut: %{y:,.0f} m³<extra></extra>",
         )
     )
     fig.add_trace(
@@ -243,17 +270,53 @@ def fig_mass_diagram(df: pd.DataFrame, shrink_swell: float = 1.125, access_id: O
             line=dict(color=_FILL_COLOR, width=2),
             fill="tozeroy",
             fillcolor="rgba(74,144,217,0.12)",
+            hovertemplate="Station %{x:.0f} m<br>Cumulative fill: %{y:,.0f} m³<extra></extra>",
         )
     )
+    if abs(shrink_swell - 1.0) > 1e-6:
+        fig.add_trace(
+            go.Scatter(
+                x=sub["station_m"],
+                y=sub["cut_vol_cum_m3"],
+                name="Cut in-situ (m³)",
+                line=dict(color=_CUT_COLOR, width=1.5, dash="dot"),
+                opacity=0.7,
+                hovertemplate="Station %{x:.0f} m<br>In-situ cut: %{y:,.0f} m³<extra></extra>",
+            )
+        )
     fig.add_trace(
         go.Scatter(
             x=sub["station_m"],
             y=sub["mass_balance_m3"],
             name="Mass Balance (m³)",
             line=dict(color=_MASS_COLOR, width=2, dash="dash"),
+            hovertemplate="Station %{x:.0f} m<br>Balance: %{y:,.0f} m³<extra></extra>",
         )
     )
     fig.add_hline(y=0, line_dash="dot", line_color=_ZERO_COLOR, annotation_text="Balance zero")
+
+    end_x = float(sub["station_m"].iloc[-1])
+    end_bal = float(sub["mass_balance_m3"].iloc[-1])
+    if end_bal > 0:
+        end_txt = f"Final balance: +{end_bal:,.0f} m³ (waste)"
+        end_color = _CUT_COLOR
+    elif end_bal < 0:
+        end_txt = f"Final balance: {end_bal:,.0f} m³ (borrow)"
+        end_color = _FILL_COLOR
+    else:
+        end_txt = "Final balance: 0 m³"
+        end_color = _ZERO_COLOR
+    fig.add_annotation(
+        x=end_x,
+        y=end_bal,
+        text=end_txt,
+        showarrow=True,
+        arrowhead=2,
+        ax=-120,
+        ay=-25,
+        font=dict(color=end_color, size=11),
+        bgcolor="rgba(255,255,255,0.85)",
+    )
 
     fig.update_layout(
         xaxis_title="Chainage (m)",

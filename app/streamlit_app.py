@@ -314,22 +314,64 @@ if st.session_state.results_df is not None:
         sel_acc_x = st.selectbox("Access alignment", ["All"] + access_ids, key="xsec_sel")
         acc_filter_x = None if sel_acc_x == "All" else sel_acc_x
         sub_x = df[df["access_id"] == acc_filter_x] if acc_filter_x else df
-        sta_min = float(sub_x["station_m"].min())
-        sta_max = float(sub_x["station_m"].max())
-        sta_sel = st.slider(
-            "Station (m)", min_value=sta_min, max_value=sta_max,
-            value=(sta_min + sta_max) / 2, step=5.0, key="xsec_sta",
+
+        station_filter = st.radio(
+            "Station filter",
+            ["All stations", "Cut only", "Fill only"],
+            horizontal=True,
+            key="xsec_station_filter",
         )
+
+        if station_filter == "Cut only":
+            station_pool = sub_x[sub_x["cut_height_m"] > 0.01]
+        elif station_filter == "Fill only":
+            station_pool = sub_x[sub_x["fill_height_m"] > 0.01]
+        else:
+            station_pool = sub_x
+
+        if station_pool.empty:
+            st.info("No stations match this filter for the selected alignment. Showing all stations.")
+            station_pool = sub_x
+
+        quick_pin = st.radio(
+            "Quick pin",
+            ["Mid", "Max cut", "Max fill"],
+            horizontal=True,
+            key="xsec_quick_pin",
+        )
+
+        station_options = sorted({float(v) for v in station_pool["station_m"].round(2).tolist()})
+        if quick_pin == "Max cut":
+            target_station = float(sub_x.loc[sub_x["cut_height_m"].idxmax(), "station_m"])
+        elif quick_pin == "Max fill":
+            target_station = float(sub_x.loc[sub_x["fill_height_m"].idxmax(), "station_m"])
+        else:
+            target_station = float(station_options[len(station_options) // 2])
+
+        nearest_station = min(station_options, key=lambda s: abs(float(s) - target_station))
+        sta_sel = st.select_slider(
+            "Station (m)",
+            options=station_options,
+            value=nearest_station,
+            key=f"xsec_sta_{sel_acc_x}_{station_filter}",
+        )
+
         col_xA, col_xB = st.columns([3, 1])
         with col_xA:
             st.plotly_chart(
-                plots.fig_cross_section(df, sta_sel, acc_filter_x),
+                plots.fig_cross_section(df, float(sta_sel), acc_filter_x),
                 use_container_width=True,
             )
         with col_xB:
-            row_x = sub_x.iloc[(sub_x["station_m"] - sta_sel).abs().argsort()[:1]]
+            row_x = sub_x.iloc[(sub_x["station_m"] - float(sta_sel)).abs().argsort()[:1]]
             if not row_x.empty:
                 r = row_x.iloc[0]
+                if r["cut_height_m"] > 0.01:
+                    st.caption("Section type: **CUT**")
+                elif r["fill_height_m"] > 0.01:
+                    st.caption("Section type: **FILL**")
+                else:
+                    st.caption("Section type: **ON GRADE**")
                 st.metric("Terrain elev.", f"{r['z_terrain_m']:.2f} m")
                 st.metric("Grade elev.",   f"{r['z_grade_m']:.2f} m")
                 st.metric("Cut height",    f"{r['cut_height_m']:.2f} m")
