@@ -47,9 +47,12 @@ def log_access(session_id: str) -> str | None:
     ip_address = get_public_ip()
     
     try:
+        from datetime import datetime
+        now_iso = datetime.utcnow().isoformat()
         resp = supabase.table(SUPABASE_LOG_TABLE).insert({
             "session_id": session_id,
-            "ip_address": ip_address
+            "ip_address": ip_address,
+            "exit_time": now_iso,
         }).execute()
 
         rows = getattr(resp, "data", None) or []

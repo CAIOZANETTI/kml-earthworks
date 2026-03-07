@@ -8,6 +8,7 @@ import os
 import uuid
 import inspect
 import hashlib
+import time
 
 # Allow imports from repo root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -103,9 +104,13 @@ for key in (
     "base_input_label",
     "applied_design_params",
     "last_design_signature",
+    "access_log_id",
 ):
     if key not in st.session_state:
         st.session_state[key] = None
+
+if "last_exit_ping_ts" not in st.session_state:
+    st.session_state.last_exit_ping_ts = 0.0
 
 if "auto_update_design" not in st.session_state:
     st.session_state.auto_update_design = True
@@ -118,6 +123,14 @@ if "session_id" not in st.session_state:
     row_id = db.log_access(st.session_state.session_id)
     if row_id:
         st.session_state.access_log_id = row_id
+        st.session_state.last_exit_ping_ts = time.time()
+
+# Best-effort "last seen": updates exit_time periodically during active reruns.
+if st.session_state.access_log_id:
+    now_ts = time.time()
+    if now_ts - float(st.session_state.last_exit_ping_ts or 0.0) >= 30.0:
+        db.update_access_exit_time(st.session_state.access_log_id)
+        st.session_state.last_exit_ping_ts = now_ts
 
 
 def _make_input_signature(data_source: str, sample_choice, files_data):
