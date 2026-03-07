@@ -152,18 +152,20 @@ with st.sidebar:
     shrink_swell = st.slider("Shrink/Swell factor",  0.90, 1.30, 1.125, 0.005, format="%.3f")
     max_height   = st.slider("Max cut/fill height (m)", 2.0, 20.0, 10.0, 0.5)
 
-    run_disabled = False
-    if data_source == "Upload your own KML" and not files_data:
-        run_disabled = True
-    elif data_source == "Use a sample KML" and not sample_choice:
-        run_disabled = True
+run_disabled = False
+if data_source == "Upload your own KML" and not files_data:
+    run_disabled = True
+elif data_source == "Use a sample KML" and not sample_choice:
+    run_disabled = True
 
-    run = st.button(
-        "⚡ Run Analysis",
-        type="primary",
-        use_container_width=True,
-        disabled=run_disabled or not st.session_state.lead_submitted,
-    )
+st.write("---")
+# Main Content Area Bottom
+run = st.button(
+    "⚡ Run Analysis",
+    type="primary",
+    use_container_width=True,
+    disabled=run_disabled or not st.session_state.lead_submitted,
+)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
