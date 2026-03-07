@@ -151,6 +151,10 @@ with st.sidebar:
     fill_slope   = st.slider("Fill side slope (H:V)", 1.0,  3.0,  1.5, 0.25)
     shrink_swell = st.slider("Shrink/Swell factor",  0.90, 1.30, 1.125, 0.005, format="%.3f")
     max_height   = st.slider("Max cut/fill height (m)", 2.0, 20.0, 10.0, 0.5)
+    st.markdown("---")
+    st.markdown("### Feedback")
+    st.caption("Tell me what you liked and what can be improved.")
+    st.markdown("Contact: **caiozanetti@gmail.com**")
 
 run_disabled = False
 if data_source == "Upload your own KML" and not files_data:
@@ -444,12 +448,6 @@ if st.session_state.results_df is not None:
         st.subheader("Analysis Parameters Used")
         params_df = pd.DataFrame(params.items(), columns=["Parameter", "Value"])
         st.dataframe(params_df, use_container_width=True, hide_index=True)
-
-    # ── Feedback contact ──
-    st.divider()
-    st.markdown("### Feedback")
-    st.caption("Tell me what you liked and what can be improved.")
-    st.markdown("Contact: **caiozanetti@gmail.com**")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # EMPTY STATE
