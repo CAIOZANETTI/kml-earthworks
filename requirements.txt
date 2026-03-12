@@ -9,3 +9,4 @@ gspread>=6.1.0
 google-auth>=2.29.0
 supabase>=2.3.0
 python-dotenv>=1.0.0
+pytest>=8.0.0

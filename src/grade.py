@@ -10,6 +10,8 @@ import numpy as np
 from scipy.optimize import minimize_scalar
 from typing import List, Dict, Tuple
 
+from src.types import StationList
+
 
 def _apply_grade_constraints(
     z_terrain: np.ndarray,
@@ -107,14 +109,28 @@ def _compute_volumes(
     a_fill = road_width_m * h_fill + fill_slope_hv * h_fill ** 2
 
     dx = np.diff(x_stations)
-    v_cut  = (a_cut [:-1] + a_cut [1:]) * 0.5 * dx
-    v_fill = (a_fill[:-1] + a_fill[1:]) * 0.5 * dx
+
+    # Prismatoid formula: V = (A1 + A2 + 4*Am) * L / 6
+    # where Am is cross-sectional area at midpoint between stations
+    # This is more accurate than average-end-area for irregular terrain
+
+    # Calculate heights at midpoints (linear interpolation)
+    h_cut_mid  = (h_cut[:-1] + h_cut[1:]) * 0.5
+    h_fill_mid = (h_fill[:-1] + h_fill[1:]) * 0.5
+
+    # Calculate areas at midpoints
+    a_cut_mid  = road_width_m * h_cut_mid  + cut_slope_hv  * h_cut_mid  ** 2
+    a_fill_mid = road_width_m * h_fill_mid + fill_slope_hv * h_fill_mid ** 2
+
+    # Apply prismatoid formula
+    v_cut  = (a_cut[:-1] + a_cut[1:] + 4.0 * a_cut_mid)  * dx / 6.0
+    v_fill = (a_fill[:-1] + a_fill[1:] + 4.0 * a_fill_mid) * dx / 6.0
 
     return v_cut, v_fill, h_cut, h_fill
 
 
 def compute_grade(
-    station_points: List[Dict],
+    station_points: StationList,
     road_width_m: float = 6.0,
     max_slope_pct: float = 16.0,
     max_height_m: float = 10.0,
@@ -122,7 +138,7 @@ def compute_grade(
     fill_slope_hv: float = 1.5,
     shrink_swell: float = 1.125,
     objective_mode: str = "balanced",
-) -> List[Dict]:
+) -> StationList:
     """
     Given station points (with z_terrain_m), compute the optimal grade line
     and return enriched station dicts with cut/fill geometry.

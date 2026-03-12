@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kml-earthworks"
+version = "0.1.0"
+description = "Turn Google Earth KML sketches into earthworks cut/fill volumes"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    {name = "Caio Zanetti"}
+]
+dependencies = [
+    "streamlit",
+    "pandas",
+    "numpy",
+    "requests",
+    "plotly",
+    "openpyxl",
+    "gspread",
+    "oauth2client",
+    "scipy",
+    "supabase",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "app*"]

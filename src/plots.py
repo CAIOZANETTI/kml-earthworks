@@ -8,7 +8,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-from typing import Optional
+from typing import List, Optional, Tuple
 
 _COLORS = px.colors.qualitative.Bold
 _CUT_COLOR = "#E05252"
@@ -19,7 +19,7 @@ _MASS_COLOR = "#7B2D8B"
 _ZERO_COLOR = "#AAAAAA"
 
 
-def _access_color(access_id: str, all_ids: list) -> str:
+def _access_color(access_id: str, all_ids: List[str]) -> str:
     idx = all_ids.index(access_id) if access_id in all_ids else 0
     return _COLORS[idx % len(_COLORS)]
 
@@ -157,7 +157,7 @@ def fig_profile(df: pd.DataFrame, access_id: Optional[str] = None) -> go.Figure:
             name="Grade line",
             line=dict(color=_GRADE_COLOR, width=3),
             hovertemplate="Station %{x:.0f} m<br>Grade: %{y:.2f} m<br>Slope: %{customdata:.1f}%<extra></extra>",
-            customdata=sub.get("grade_slope_pct", sub["slope_pct"]),
+            customdata=sub.get("grade_slope_pct", sub["terrain_slope_pct"]),
         )
     )
 
@@ -238,15 +238,23 @@ def fig_mass_diagram(
         return go.Figure()
 
     if access_id is None and sub["access_id"].nunique() > 1:
-        # For "All alignments", aggregate incremental volumes by chainage.
-        # This avoids non-monotonic traces when different alignments restart at 0 m.
-        sub = (
-            sub.groupby("station_m", as_index=False)[["cut_vol_m3", "fill_vol_m3"]]
-            .sum()
-            .sort_values("station_m")
+        # CRITICAL: Mass balance is meaningless when aggregating independent alignments
+        # Each alignment has its own chainage (0-Xm), mixing them produces incorrect results
+        fig = go.Figure()
+        fig.add_annotation(
+            text=(
+                "⚠️ Mass diagram not available for multiple alignments<br>"
+                "Select a single alignment to view mass balance.<br><br>"
+                "Mass balance requires continuous chainage along one alignment.<br>"
+                "Aggregating independent alignments with overlapping chainages<br>"
+                "produces incorrect cumulative volumes."
+            ),
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font=dict(size=13, color="#555"),
+            align="center",
         )
-        sub["cut_vol_cum_m3"] = sub["cut_vol_m3"].cumsum()
-        sub["fill_vol_cum_m3"] = sub["fill_vol_m3"].cumsum()
+        fig.update_layout(height=360, template="plotly_white")
+        return fig
     else:
         sub = sub.sort_values("station_m").copy()
 
@@ -513,7 +521,7 @@ def fig_cross_section(df: pd.DataFrame, station_m: float, access_id: Optional[st
 
 def _perp_offset_deg(
     lon_arr: np.ndarray, lat_arr: np.ndarray, half_w_m_arr: np.ndarray
-) -> tuple:
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Return (d_lon, d_lat) arrays representing a perpendicular offset
     of half_w_m_arr metres to the right of the road direction.

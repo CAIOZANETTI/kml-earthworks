@@ -25,6 +25,10 @@ Setup (one-time):
 import datetime
 from typing import Optional, Tuple
 
+from src.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def _get_client():
     """Return an authenticated gspread client from Streamlit secrets."""
@@ -42,6 +46,7 @@ def _get_client():
         # Use gspread.Client directly — gspread.authorize() is deprecated in v5+
         return gspread.Client(auth=creds)
     except Exception as exc:
+        logger.error(f"Failed to create gspread client: {exc}", exc_info=True)
         return str(exc)   # return error message so callers can surface it
 
 
@@ -69,17 +74,19 @@ def log_lead(
 
         sheet_id = st.secrets.get("gsheets", {}).get("spreadsheet_id", "")
         if not sheet_id:
+            logger.warning("spreadsheet_id not found in [gsheets] secrets")
             return False, "spreadsheet_id not found in [gsheets] secrets"
 
         client = _get_client()
         if isinstance(client, str):
             # _get_client returned an error message
+            logger.error(f"Auth error when logging lead: {client}")
             return False, f"Auth error: {client}"
 
         sheet = client.open_by_key(sheet_id).sheet1
         sheet.append_row(
             [
-                datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+                datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                 name,
                 company,         # column 3 — kept blank if not collected
                 country,
@@ -90,8 +97,10 @@ def log_lead(
             ],
             value_input_option="USER_ENTERED",
         )
+        logger.info(f"Successfully logged lead for {email}")
         return True, ""
     except Exception as exc:
+        logger.error(f"Failed to log lead: {exc}", exc_info=True)
         return False, str(exc)
 
 
@@ -100,5 +109,6 @@ def leads_configured() -> bool:
     try:
         import streamlit as st
         return bool(st.secrets.get("gsheets", {}).get("spreadsheet_id"))
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Could not check leads configuration: {e}")
         return False

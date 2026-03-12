@@ -7,9 +7,11 @@ Segment = one access alignment (file_name + access_id).
 import pandas as pd
 from typing import List, Dict
 
+from src.types import AlignmentWithStationsList, OverallKPIs
+
 
 def build_dataframe(
-    alignments_data: List[Dict],
+    alignments_data: AlignmentWithStationsList,
     shrink_swell: float = 1.125,
 ) -> pd.DataFrame:
     """
@@ -36,7 +38,27 @@ def build_dataframe(
 
     df = pd.DataFrame(rows)
 
-    # Mass balance: positive = waste (surplus cut), negative = borrow needed
+    # Recalculate cumulative volumes per alignment to ensure correctness
+    # when multiple alignments are concatenated
+    df["cut_vol_cum_m3"] = df.groupby(["file_name", "access_id"])["cut_vol_m3"].cumsum()
+    df["fill_vol_cum_m3"] = df.groupby(["file_name", "access_id"])["fill_vol_m3"].cumsum()
+
+    # Mass balance calculation using shrink/swell factor
+    #
+    # Engineering convention (shrink_swell > 1.0):
+    #   - Cut volume is measured in-situ (natural ground, compacted by nature)
+    #   - When excavated, soil expands (~15-30% swell during transport)
+    #   - When recompacted as fill, soil shrinks but doesn't reach original in-situ density
+    #   - Net effect: Need more cut volume than fill volume to achieve mass balance
+    #
+    # Example with shrink_swell = 1.125 (12.5% factor):
+    #   - To fill 100 m³, you need 112.5 m³ of cut material
+    #   - Cut loses density when excavated and doesn't fully recover when recompacted
+    #
+    # Mass balance formula: cut * shrink_swell - fill
+    #   - Positive result = waste (surplus cut material)
+    #   - Negative result = borrow (need additional fill material)
+    #   - Zero = balanced earthworks (ideal for cost optimization)
     df["mass_balance_m3"] = (
         df["cut_vol_cum_m3"] * shrink_swell - df["fill_vol_cum_m3"]
     )
@@ -59,6 +81,8 @@ def build_segment_summary(df: pd.DataFrame, shrink_swell: float = 1.125) -> pd.D
         length_m = grp["station_m"].max()
         cut_total = grp["cut_vol_m3"].sum()
         fill_total = grp["fill_vol_m3"].sum()
+        # Net mass balance: cut * shrink_swell - fill
+        # (see detailed explanation in build_dataframe function)
         net = cut_total * shrink_swell - fill_total
 
         records.append(
@@ -77,7 +101,7 @@ def build_segment_summary(df: pd.DataFrame, shrink_swell: float = 1.125) -> pd.D
     return pd.DataFrame(records)
 
 
-def overall_kpis(summary_df: pd.DataFrame) -> Dict:
+def overall_kpis(summary_df: pd.DataFrame) -> OverallKPIs:
     """Return dict of overall KPI values for the header cards."""
     return {
         "total_length_m": summary_df["length_m"].sum(),

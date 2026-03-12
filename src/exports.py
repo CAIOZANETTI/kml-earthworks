@@ -26,7 +26,7 @@ def to_excel_bytes(detail_df: pd.DataFrame, summary_df: pd.DataFrame) -> bytes:
             "file_name", "access_id", "station_m", "stake_20m",
             "lat", "lon",
             "z_terrain_m", "z_grade_m",
-            "slope_pct", "grade_slope_pct",
+            "terrain_slope_pct", "grade_slope_pct",
             "cut_height_m", "fill_height_m",
             "cut_area_m2", "fill_area_m2",
             "cut_vol_m3", "fill_vol_m3",
@@ -89,7 +89,7 @@ def to_html_report(
         figures:    dict of plotly Figure objects keyed by section name
         params:     dict of parameters used (road_width_m, max_slope_pct, etc.)
     """
-    now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     bal_type = "Waste (surplus cut)" if kpis["net_m3"] >= 0 else "Borrow needed"
     bal_color = "success" if kpis["net_m3"] >= 0 else "danger"
 
@@ -128,7 +128,7 @@ def to_html_report(
     # ── Detailed table (collapsed) ──
     detail_cols = [
         "access_id", "station_m", "z_terrain_m", "z_grade_m",
-        "slope_pct", "cut_height_m", "fill_height_m",
+        "terrain_slope_pct", "cut_height_m", "fill_height_m",
         "cut_vol_m3", "fill_vol_m3", "cut_vol_cum_m3", "fill_vol_cum_m3",
     ]
     dcols = [c for c in detail_cols if c in detail_df.columns]

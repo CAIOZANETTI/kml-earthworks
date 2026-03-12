@@ -7,6 +7,8 @@ Interpolates stakes every STAKE_INTERVAL metres along the alignment.
 import numpy as np
 from typing import List, Dict
 
+from src.types import PointList, StationList
+
 STAKE_INTERVAL = 20.0  # metres
 EARTH_RADIUS_M = 6_371_000.0
 
@@ -20,13 +22,13 @@ def _haversine_dist(lat1, lon1, lat2, lon2) -> float:
     return EARTH_RADIUS_M * 2 * np.arcsin(np.sqrt(a))
 
 
-def build_stationing(points: List[Dict], stake_interval: float = STAKE_INTERVAL) -> List[Dict]:
+def build_stationing(points: PointList, stake_interval: float = STAKE_INTERVAL) -> StationList:
     """
     Given raw points with lat/lon/z_terrain_m, return a denser list
     of station points interpolated every `stake_interval` metres.
 
     Each returned dict has:
-        station_m, lat, lon, z_terrain_m, stake_20m (bool), slope_pct
+        station_m, lat, lon, z_terrain_m, stake_20m (bool), terrain_slope_pct
     """
     if len(points) < 2:
         raise ValueError("Need at least 2 points to build stationing.")
@@ -69,13 +71,13 @@ def build_stationing(points: List[Dict], stake_interval: float = STAKE_INTERVAL)
     for i, (sta, lat, lon, z) in enumerate(
         zip(stations, interp_lats, interp_lons, interp_z)
     ):
-        # slope_pct between this station and previous
+        # terrain_slope_pct between this station and previous
         if i == 0:
-            slope_pct = 0.0
+            terrain_slope_pct = 0.0
         else:
             dz = float(interp_z[i]) - float(interp_z[i - 1])
             dx = float(stations[i]) - float(stations[i - 1])
-            slope_pct = (dz / dx * 100) if dx > 0 else 0.0
+            terrain_slope_pct = (dz / dx * 100) if dx > 0 else 0.0
 
         station_points.append(
             {
@@ -84,7 +86,7 @@ def build_stationing(points: List[Dict], stake_interval: float = STAKE_INTERVAL)
                 "lon": round(float(lon), 8),
                 "z_terrain_m": round(float(z), 2),
                 "stake_20m": True,  # all interpolated stations ARE stakes
-                "slope_pct": round(slope_pct, 2),
+                "terrain_slope_pct": round(terrain_slope_pct, 2),
             }
         )
 

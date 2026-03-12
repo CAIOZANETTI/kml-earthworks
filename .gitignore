@@ -1,7 +1,41 @@
-
 # Ignorar pasta de melhorias
 melhorias/
 
+# Product roadmap (mantido localmente)
+ROADMAP.md
+
 # Secrets
 .env
+.streamlit/secrets.toml
+
+# Python virtual environments
 .venv/
+venv/
+env/
+ENV/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ad-hoc test scripts in root directory only (not in tests/ folder)
+/test_*.py
+
+# OS files
+.DS_Store
+Thumbs.db

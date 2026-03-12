@@ -10,9 +10,6 @@ import inspect
 import hashlib
 import time
 
-# Allow imports from repo root
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -25,6 +22,9 @@ from src.stationing import build_stationing
 from src.grade import compute_grade
 from src.earthworks import build_dataframe, build_segment_summary, overall_kpis
 from src import plots, exports, db
+from src.logger import get_logger
+
+logger = get_logger(__name__)
 
 _COMPUTE_GRADE_SUPPORTS_OBJECTIVE = "objective_mode" in inspect.signature(compute_grade).parameters
 
@@ -125,9 +125,9 @@ if "session_id" not in st.session_state:
         st.session_state.access_log_id = row_id
         st.session_state.last_exit_ping_ts = time.time()
     else:
-        print(
-            "Access log insert failed for session "
-            f"{st.session_state.session_id}. Check Supabase secrets and RLS policies."
+        logger.warning(
+            f"Access log insert failed for session {st.session_state.session_id}. "
+            "Check Supabase secrets and RLS policies."
         )
 
 # Best-effort "last seen": updates exit_time periodically during active reruns.
@@ -147,7 +147,7 @@ def _make_input_signature(data_source: str, sample_choice, files_data):
     for f in files_data:
         payload = f["content"]
         payload_bytes = payload.encode("utf-8") if isinstance(payload, str) else payload
-        digest = hashlib.md5(payload_bytes).hexdigest()[:12]
+        digest = hashlib.sha256(payload_bytes).hexdigest()[:12]
         files_sig.append((f["name"], len(payload_bytes), digest))
     return ("upload", tuple(sorted(files_sig)))
 
@@ -341,7 +341,7 @@ design_outdated = False
 if run and not run_disabled:
     if data_source == "Use a sample KML" and sample_choice:
         try:
-            with open(os.path.join(os.path.dirname(__file__), "..", "sample", sample_choice), "r") as f:
+            with open(os.path.join(os.path.dirname(__file__), "..", "sample", sample_choice), "rb") as f:
                 files_data = [{"name": sample_choice, "content": f.read()}]
         except Exception as e:
             st.error(f"Error loading sample: {e}")
@@ -365,16 +365,43 @@ if run and not run_disabled:
                 progress_bar.progress(done / total)
 
             all_points_flat = [p for a in alignments for p in a["points"]]
-            enrich_elevation(all_points_flat, progress_callback=update_progress)
+            enriched_points, validation = enrich_elevation(
+                all_points_flat,
+                progress_callback=update_progress,
+                cooldown_state=st.session_state
+            )
 
             # Re-distribute enriched points back to alignments
             idx = 0
             for a in alignments:
                 n = len(a["points"])
-                a["points"] = all_points_flat[idx : idx + n]
+                a["points"] = enriched_points[idx : idx + n]
                 idx += n
             progress_bar.empty()
-            st.write(f"   → {len(all_points_flat):,} points enriched")
+
+            # Show validation warnings if there are issues
+            if validation['missing_count'] > 0:
+                missing_pct = (validation['missing_count'] / validation['total_count'] * 100)
+                if missing_pct > 50:
+                    st.error(
+                        f"⚠️ Elevation data unavailable for {validation['missing_count']:,} out of "
+                        f"{validation['total_count']:,} points ({missing_pct:.1f}%). "
+                        f"Using 0.0m elevation as fallback. **Results may be highly inaccurate.** "
+                        f"Consider checking your coordinates or trying again later."
+                    )
+                elif missing_pct > 10:
+                    st.warning(
+                        f"⚠️ Elevation data unavailable for {validation['missing_count']:,} out of "
+                        f"{validation['total_count']:,} points ({missing_pct:.1f}%). "
+                        f"Using 0.0m elevation as fallback. Results may be less accurate in some areas."
+                    )
+                else:
+                    st.info(
+                        f"ℹ️ Elevation data unavailable for {validation['missing_count']:,} points "
+                        f"({missing_pct:.1f}%). Using 0.0m elevation as fallback."
+                    )
+
+            st.write(f"   → {len(all_points_flat):,} points enriched (success rate: {validation['success_rate']:.1f}%)")
 
             # 3. Build and cache station base (no design params yet)
             st.write("📏 Building station base…")
@@ -640,7 +667,7 @@ if st.session_state.results_df is not None:
 
         detail_cols = [
             "access_id", "station_m", "z_terrain_m", "z_grade_m",
-            "slope_pct", "cut_height_m", "fill_height_m",
+            "terrain_slope_pct", "cut_height_m", "fill_height_m",
             "cut_vol_m3", "fill_vol_m3", "cut_vol_cum_m3", "fill_vol_cum_m3",
         ]
         show_cols = [c for c in detail_cols if c in filtered.columns]
@@ -649,11 +676,11 @@ if st.session_state.results_df is not None:
             use_container_width=True,
             hide_index=True,
             column_config={
-                "station_m":        st.column_config.NumberColumn("Station (m)",   format="%.0f"),
-                "z_terrain_m":      st.column_config.NumberColumn("Terrain (m)",   format="%.2f"),
-                "z_grade_m":        st.column_config.NumberColumn("Grade (m)",     format="%.2f"),
-                "slope_pct":        st.column_config.NumberColumn("Slope (%)",     format="%.1f"),
-                "cut_height_m":     st.column_config.NumberColumn("Cut H (m)",     format="%.2f"),
+                "station_m":             st.column_config.NumberColumn("Station (m)",       format="%.0f"),
+                "z_terrain_m":           st.column_config.NumberColumn("Terrain (m)",       format="%.2f"),
+                "z_grade_m":             st.column_config.NumberColumn("Grade (m)",         format="%.2f"),
+                "terrain_slope_pct":     st.column_config.NumberColumn("Terrain Slope (%)", format="%.1f"),
+                "cut_height_m":          st.column_config.NumberColumn("Cut H (m)",         format="%.2f"),
                 "fill_height_m":    st.column_config.NumberColumn("Fill H (m)",    format="%.2f"),
                 "cut_vol_m3":       st.column_config.NumberColumn("Cut Vol (m³)",  format="%.1f"),
                 "fill_vol_m3":      st.column_config.NumberColumn("Fill Vol (m³)", format="%.1f"),
